@@ -100,7 +100,7 @@ contract PRX is ERC20, Pausable {
         _mint(to, amount);
     }
 
-    function burn(address account, uint256 amount) public  notBlacklisted(account) {
+    function burn(address account, uint256 amount) public onlyAuthorized notBlacklisted(account) {
         _burn(account, amount);
     }
 
@@ -141,8 +141,6 @@ contract PRX is ERC20, Pausable {
         require(!processedNonces[nonce], "Transfer already processed");
         require(balanceOf(msg.sender) >= amount, "Insufficient balance to lock tokens");
         require(max_amount >= amount, "Lock amount exceeds maximum allowed");
-       // require(approve(msg.sender,amount), "Approve balance");
-
         // Burn tokens from the user's balance using burnFrom
         super._burn(msg.sender,amount);
 
