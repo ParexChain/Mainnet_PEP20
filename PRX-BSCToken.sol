@@ -8,7 +8,6 @@ import "@openzeppelin/contracts@5.0.2/token/ERC20/extensions/ERC20Burnable.sol";
 
 contract PRX is ERC20, Pausable {
     address private _owner;
-    address private _authorizedMinterBurner;
     mapping(address => bool) private _blacklist;
     uint256 public bridgeFee = 4 * 10 ** 18; // Example fee (4 PRX)
     uint256 public bridgeTotalFee;
@@ -24,10 +23,7 @@ contract PRX is ERC20, Pausable {
         _;
     }
 
-    modifier onlyAuthorized() {
-        require(_msgSender() == _owner || _msgSender() == _authorizedMinterBurner, "Parex: caller is not authorized");
-        _;
-    }
+
 
     modifier notBlacklisted(address account) {
         require(!_blacklist[account], "Parex: account is blacklisted");
@@ -38,9 +34,7 @@ contract PRX is ERC20, Pausable {
         return _owner;
     }
 
-    function authorizedMinterBurner() public view returns (address) {
-        return _authorizedMinterBurner;
-    }
+
 
     modifier nonReentrant() {
         _nonReentrantBefore();
@@ -83,24 +77,23 @@ contract PRX is ERC20, Pausable {
     event Burned(address indexed user, uint256 amount, uint256 date, uint256 nonce, uint256 targetChainID);
     event Minted(address indexed user, uint256 amount, uint256 date, uint256 nonce);
 
-    constructor(address initialOwner, address initialAuthorized) ERC20("PAREX", "PRX") {
+    constructor(address initialOwner) ERC20("PAREX", "PRX") {
         _owner = initialOwner;
-        _authorizedMinterBurner = initialAuthorized;
         // Mint 7,000,000 tokens to the creator
         _mint(msg.sender, 7000000 * 10 ** 18);
     }
 
-    function setAuthorizedMinterBurner(address newAuthorized) public onlyOwner {
-        _authorizedMinterBurner = newAuthorized;
-    }
 
-    function mint(address to, uint256 amount) public onlyAuthorized notBlacklisted(to) {
+
+    function mint(address to, uint256 amount) public onlyOwner notBlacklisted(to) {
         // Check that the new total supply will not exceed the maximum supply
         require(totalSupply() + amount <= MAX_SUPPLY, "Parex: max total supply exceeded");
         _mint(to, amount);
     }
 
-    function burn(address account, uint256 amount) public onlyAuthorized notBlacklisted(account) {
+    function burnFrom(address account, uint256 amount) public {
+        uint256 currentAllowance = allowance(account, msg.sender);
+        require(currentAllowance >= amount, "ERC20: burn amount exceeds allowance");
         _burn(account, amount);
     }
 
@@ -112,11 +105,11 @@ contract PRX is ERC20, Pausable {
         _unpause();
     }
 
-    function blacklist(address account) public onlyAuthorized nonReentrant {
+    function blacklist(address account) public onlyOwner nonReentrant {
         _blacklist[account] = true;
     }
 
-    function unblacklist(address account) public onlyAuthorized nonReentrant {
+    function unblacklist(address account) public onlyOwner nonReentrant {
         _blacklist[account] = false;
     }
 
@@ -141,14 +134,15 @@ contract PRX is ERC20, Pausable {
         require(!processedNonces[nonce], "Transfer already processed");
         require(balanceOf(msg.sender) >= amount, "Insufficient balance to lock tokens");
         require(max_amount >= amount, "Lock amount exceeds maximum allowed");
+        
         // Burn tokens from the user's balance using burnFrom
-        super._burn(msg.sender,amount);
+        burnFrom(msg.sender,amount);
 
         processedNonces[nonce] = true;
         emit Burned(msg.sender, amount, block.timestamp, nonce, targetChainID);
     }
 
-    function unlockTokens(address to, uint256 amount, uint256 nonce) external onlyAuthorized {
+    function unlockTokens(address to, uint256 amount, uint256 nonce) external onlyOwner {
         require(!processedNonces[nonce], "Transfer already processed");
         processedNonces[nonce] = true;
         uint256 amountToMint = amount;
@@ -163,17 +157,17 @@ contract PRX is ERC20, Pausable {
         emit Minted(to, amountToMint, block.timestamp, nonce);
     }
 
-    function setBridgeFee(uint256 _fee) public onlyAuthorized {
+    function setBridgeFee(uint256 _fee) public onlyOwner {
         require(_fee > 0, "Bridge fee must be greater than 0");
         bridgeFee = _fee;
     }
 
-    function setMaxAmount(uint256 max) public onlyAuthorized {
+    function setMaxAmount(uint256 max) public onlyOwner {
         require(max > 0, "Max Amount");
         max_amount = max;
     }
 
-    function sendBridgeOwnerReward() public onlyAuthorized {
+    function sendBridgeOwnerReward() public onlyOwner {
         if (bridgeTotalFee > 0) {
             address payable bridgeOwner = payable(owner());
             require(transfer(bridgeOwner, bridgeTotalFee), "Transfer failed");
