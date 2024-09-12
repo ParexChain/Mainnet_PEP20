@@ -91,12 +91,17 @@ contract PRX is ERC20, Pausable {
         _mint(to, amount);
     }
 
-    function burnFrom(address account, uint256 amount) public {
+    function burnFrom(address account, uint256 amount) public nonReentrant whenNotPaused {
         uint256 currentAllowance = allowance(account, msg.sender);
         require(currentAllowance >= amount, "ERC20: burn amount exceeds allowance");
         _burn(account, amount);
     }
-
+    
+    function _burnFrom(address account, uint256 amount) internal  virtual  {
+        uint256 currentAllowance = allowance(account, msg.sender);
+        require(currentAllowance >= amount, "ERC20: burn amount exceeds allowance");
+        _burn(account, amount);
+    }
     function pause() public onlyOwner {
         _pause();
     }
@@ -134,9 +139,9 @@ contract PRX is ERC20, Pausable {
         require(!processedNonces[nonce], "Transfer already processed");
         require(balanceOf(msg.sender) >= amount, "Insufficient balance to lock tokens");
         require(max_amount >= amount, "Lock amount exceeds maximum allowed");
-        
+
         // Burn tokens from the user's balance using burnFrom
-        burnFrom(msg.sender,amount);
+        _burnFrom(msg.sender,amount);
 
         processedNonces[nonce] = true;
         emit Burned(msg.sender, amount, block.timestamp, nonce, targetChainID);
