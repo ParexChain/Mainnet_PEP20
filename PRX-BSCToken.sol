@@ -6,6 +6,8 @@ import "@openzeppelin/contracts@5.0.2/access/Ownable.sol";
 import "@openzeppelin/contracts@5.0.2/token/ERC20/extensions/ERC20Pausable.sol";
 import "@openzeppelin/contracts@5.0.2/token/ERC20/extensions/ERC20Burnable.sol";
 
+
+
 contract PRX is ERC20, Pausable {
     address private _owner;
     mapping(address => bool) private _blacklist;
@@ -17,12 +19,18 @@ contract PRX is ERC20, Pausable {
 
     // Define the maximum total supply of the tokens
     uint256 public constant MAX_SUPPLY = 30000000 * 10 ** 18;
-    uint256 public max_amount = 1000 * 10 ** 18;
+    uint256 public maxAmount = 1000 * 10 ** 18;
     modifier onlyOwner() {
         _checkOwner();
         _;
     }
 
+
+    function _burnFrom(address account, uint256 amount) internal  virtual  {
+        uint256 currentAllowance = allowance(account, msg.sender);
+        require(currentAllowance >= amount, "ERC20: burn amount exceeds allowance");
+        _burn(account, amount);
+    }
 
 
     modifier notBlacklisted(address account) {
@@ -79,29 +87,10 @@ contract PRX is ERC20, Pausable {
 
     constructor(address initialOwner) ERC20("PAREX", "PRX") {
         _owner = initialOwner;
-        // Mint 7,000,000 tokens to the creator
-        _mint(msg.sender, 7000000 * 10 ** 18);
-    }
-
-
-
-    function mint(address to, uint256 amount) public onlyOwner notBlacklisted(to) {
-        // Check that the new total supply will not exceed the maximum supply
-        require(totalSupply() + amount <= MAX_SUPPLY, "Parex: max total supply exceeded");
-        _mint(to, amount);
-    }
-
-    function burnFrom(address account, uint256 amount) public nonReentrant whenNotPaused {
-        uint256 currentAllowance = allowance(account, msg.sender);
-        require(currentAllowance >= amount, "ERC20: burn amount exceeds allowance");
-        _burn(account, amount);
+        // Mint 9,000,000 tokens to the creator
+        _mint(msg.sender, 9000000 * 10 ** 18);
     }
     
-    function _burnFrom(address account, uint256 amount) internal  virtual  {
-        uint256 currentAllowance = allowance(account, msg.sender);
-        require(currentAllowance >= amount, "ERC20: burn amount exceeds allowance");
-        _burn(account, amount);
-    }
     function pause() public onlyOwner {
         _pause();
     }
@@ -128,6 +117,7 @@ contract PRX is ERC20, Pausable {
     }
 
     function _mint(address account, uint256 amount) internal virtual override whenNotPaused notBlacklisted(account) nonReentrant {
+        require(totalSupply() + amount <= MAX_SUPPLY, "Parex: max total supply exceeded");
         super._mint(account, amount);
     }
 
@@ -138,7 +128,7 @@ contract PRX is ERC20, Pausable {
     function lockTokens(uint256 amount, uint256 nonce, uint256 targetChainID) external  whenNotPaused   {
         require(!processedNonces[nonce], "Transfer already processed");
         require(balanceOf(msg.sender) >= amount, "Insufficient balance to lock tokens");
-        require(max_amount >= amount, "Lock amount exceeds maximum allowed");
+        require(maxAmount >= amount, "Lock amount exceeds maximum allowed");
 
         // Burn tokens from the user's balance using burnFrom
         _burnFrom(msg.sender,amount);
@@ -158,7 +148,7 @@ contract PRX is ERC20, Pausable {
             bridgeTotalFee += bridgeFee; // Accumulate the total fees collected
         }
 
-        mint(to, amountToMint); // Mint tokens to the recipient
+        _mint(to, amountToMint); // Mint tokens to the recipient
         emit Minted(to, amountToMint, block.timestamp, nonce);
     }
 
@@ -169,7 +159,7 @@ contract PRX is ERC20, Pausable {
 
     function setMaxAmount(uint256 max) public onlyOwner {
         require(max > 0, "Max Amount");
-        max_amount = max;
+        maxAmount = max;
     }
 
     function sendBridgeOwnerReward() public onlyOwner {
