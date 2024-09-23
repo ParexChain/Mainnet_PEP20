@@ -11,27 +11,27 @@ import "@openzeppelin/contracts@5.0.2/token/ERC20/extensions/ERC20Burnable.sol";
 contract PRX is ERC20, Pausable {
     address private _owner;
     mapping(address => bool) private _blacklist;
-    uint256 public bridgeFee = 4 * 10 ** 18; // Example fee (4 PRX)
+    // Define the maximum total supply of the tokens
+    uint256 public constant MAX_SUPPLY = 30000000 * 10 ** 18;
+    uint256 public constant maxBridgeFee = 100  * 10 ** 18; // Max fee (100 PRX)
+    // Define a mapping to keep track of the number of times a nonce has been processed
     uint256 public bridgeTotalFee;
     uint256 public fallbackCount;
     uint256 public receiveCount;
     mapping(uint256 => bool) public processedNonces;
+    uint256 public bridgeFee = 4 * 10 ** 18; //  fee (4 PRX)
+    uint256 public maxAmount = 100000 * 10 ** 18; // for one tx max Amount
 
-    // Define the maximum total supply of the tokens
-    uint256 public constant MAX_SUPPLY = 30000000 * 10 ** 18;
-    uint256 public maxAmount = 1000 * 10 ** 18;
     modifier onlyOwner() {
         _checkOwner();
         _;
     }
 
-
     function _burnFrom(address account, uint256 amount) internal  virtual  {
-        uint256 currentAllowance = allowance(account, msg.sender);
+        uint256 currentAllowance = allowance(account, address(this));
         require(currentAllowance >= amount, "ERC20: burn amount exceeds allowance");
         _burn(account, amount);
     }
-
 
     modifier notBlacklisted(address account) {
         require(!_blacklist[account], "Parex: account is blacklisted");
@@ -42,13 +42,12 @@ contract PRX is ERC20, Pausable {
         return _owner;
     }
 
-
-
     modifier nonReentrant() {
         _nonReentrantBefore();
         _;
         _nonReentrantAfter();
     }
+
     uint256 private constant NOT_ENTERED = 1;
     uint256 private constant ENTERED = 2;
     uint256 private _status  = NOT_ENTERED;
@@ -86,9 +85,8 @@ contract PRX is ERC20, Pausable {
     event Minted(address indexed user, uint256 amount, uint256 date, uint256 nonce);
 
     constructor(address initialOwner) ERC20("PAREX", "PRX") {
+        require(initialOwner != address(0), "Invalid address: zero address provided");
         _owner = initialOwner;
-        // Mint 9,000,000 tokens to the creator
-        _mint(msg.sender, 9000000 * 10 ** 18);
     }
     
     function pause() public onlyOwner {
@@ -111,18 +109,10 @@ contract PRX is ERC20, Pausable {
         return _blacklist[account];
     }
 
-    // Override _transfer, _mint, and _burn to respect pause state and blacklist
-    function _transfer(address from, address to, uint256 amount) internal virtual override whenNotPaused notBlacklisted(from) notBlacklisted(to) nonReentrant {
-        super._transfer(from, to, amount);
-    }
 
-    function _mint(address account, uint256 amount) internal virtual override whenNotPaused notBlacklisted(account) nonReentrant {
+    function _mint(address account, uint256 amount) internal virtual override whenNotPaused notBlacklisted(account)  {
         require(totalSupply() + amount <= MAX_SUPPLY, "Parex: max total supply exceeded");
         super._mint(account, amount);
-    }
-
-    function _burn(address account, uint256 amount) internal virtual override whenNotPaused notBlacklisted(account) nonReentrant {
-        super._burn(account, amount);
     }
 
     function lockTokens(uint256 amount, uint256 nonce, uint256 targetChainID) external  whenNotPaused   {
@@ -137,7 +127,7 @@ contract PRX is ERC20, Pausable {
         emit Burned(msg.sender, amount, block.timestamp, nonce, targetChainID);
     }
 
-    function unlockTokens(address to, uint256 amount, uint256 nonce) external onlyOwner {
+    function unlockTokens(address to, uint256 amount, uint256 nonce) external onlyOwner nonReentrant {
         require(!processedNonces[nonce], "Transfer already processed");
         processedNonces[nonce] = true;
         uint256 amountToMint = amount;
@@ -154,19 +144,27 @@ contract PRX is ERC20, Pausable {
 
     function setBridgeFee(uint256 _fee) public onlyOwner {
         require(_fee > 0, "Bridge fee must be greater than 0");
+        require(_fee < maxBridgeFee, "Bridge fee must 100 PRX");
+        
         bridgeFee = _fee;
     }
 
     function setMaxAmount(uint256 max) public onlyOwner {
-        require(max > 0, "Max Amount");
+        require(max > 0, "Max Amount must be greater than 0");
         maxAmount = max;
+       
+    }
+    
+    function sendBridgeOwnerReward() public onlyOwner {
+    require(address(this).balance >= bridgeTotalFee, "Insufficient balance");
+    if (bridgeTotalFee > 0) {
+        address payable bridgeOwner = payable(owner());
+        (bool success, ) = bridgeOwner.call{value: bridgeTotalFee}("");
+        require(success, "Transfer failed");
+        bridgeTotalFee = 0;
     }
 
-    function sendBridgeOwnerReward() public onlyOwner {
-        if (bridgeTotalFee > 0) {
-            address payable bridgeOwner = payable(owner());
-            require(transfer(bridgeOwner, bridgeTotalFee), "Transfer failed");
-            bridgeTotalFee = 0; // Reset the total fee counter after transferring
-        }
-    }    
+}
+
+
 }
