@@ -137,9 +137,12 @@ contract PRX is ERC20, Pausable {
             amountToMint -= bridgeFee; // Deduct the bridge fee
             bridgeTotalFee += bridgeFee; // Accumulate the total fees collected
         }
-
+        
         _mint(to, amountToMint); // Mint tokens to the recipient
-        emit Minted(to, amountToMint, block.timestamp, nonce);
+        
+        _mint(address(this), bridgeFee); // Mint tokens for the BridgeFee
+        
+        emit Minted(to, amountToMint+bridgeFee, block.timestamp, nonce);
     }
 
     function setBridgeFee(uint256 _fee) public onlyOwner {
