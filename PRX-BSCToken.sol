@@ -21,6 +21,7 @@ contract PRX is ERC20, Pausable {
     mapping(uint256 => bool) public processedNonces;
     uint256 public bridgeFee = 4 * 10 ** 18; //  fee (4 PRX)
     uint256 public maxAmount = 100000 * 10 ** 18; // for one tx max Amount
+    IERC20 public token;
 
     modifier onlyOwner() {
         _checkOwner();
@@ -157,17 +158,21 @@ contract PRX is ERC20, Pausable {
         maxAmount = max;
        
     }
-    
+
+
     function sendBridgeOwnerReward() public onlyOwner {
-    require(address(this).balance >= bridgeTotalFee, "Insufficient balance");
-    if (bridgeTotalFee > 0) {
-        address payable bridgeOwner = payable(owner());
-        (bool success, ) = bridgeOwner.call{value: bridgeTotalFee}("");
-        require(success, "Transfer failed");
-        bridgeTotalFee = 0;
+       
+        require(balanceOf(address(this)) >= bridgeTotalFee, "Insufficient balance");
+        if (bridgeTotalFee > 0) {
+            token = IERC20(address(this));  // Initialize the ERC20 token contract address
+                        
+            // Direct transfer from contract to bridgeOwner without approve mechanism
+            require(token.transfer( owner(), bridgeTotalFee), "Transfer failed");
+            
+            bridgeTotalFee = 0; // Reset the total fee counter after transferring
+        }
     }
 
 }
 
 
-}
