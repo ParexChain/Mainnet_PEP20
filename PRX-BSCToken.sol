@@ -1,4 +1,3 @@
-
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
@@ -22,17 +21,7 @@ contract PRX is ERC20, Pausable {
     mapping(uint256 => bool) public processedNonces;
     uint256 public bridgeFee = 4 * 10 ** 18; //  fee (4 PRX)
     uint256 public maxAmount = 100000 * 10 ** 18; // for one tx max Amount
-
-
-
-    address[] public signers; // List of signers
-    mapping(address => bool) public isSigner; // To verify signers
-    mapping(address => bool) public hasApproved; // To track approvals
-    uint256 public requiredApprovals; // Number of required approvals
-    uint256 public approvalCount; // Counter for approvals
-
-
-
+    IERC20 public token;
 
     modifier onlyOwner() {
         _checkOwner();
@@ -96,17 +85,11 @@ contract PRX is ERC20, Pausable {
     event Burned(address indexed user, uint256 amount, uint256 date, uint256 nonce, uint256 targetChainID);
     event Minted(address indexed user, uint256 amount, uint256 date, uint256 nonce);
 
-    constructor(address initialOwner, address[] memory _signers, uint256 _requiredApprovals) ERC20("PAREX", "PRX") {
+    constructor(address initialOwner) ERC20("PAREX", "PRX") {
         require(initialOwner != address(0), "Invalid address: zero address provided");
         _owner = initialOwner;
-        require(_signers.length >= _requiredApprovals, "Not enough signers for required approvals");
-        signers = _signers;
-        requiredApprovals = _requiredApprovals;
-        for (uint256 i = 0; i < _signers.length; i++) {
-            isSigner[_signers[i]] = true;
-        }
     }
-
+    
     function pause() public onlyOwner {
         _pause();
     }
@@ -151,13 +134,17 @@ contract PRX is ERC20, Pausable {
         uint256 amountToMint = amount;
 
         require(amount > 0, "Amount must be greater than 0");
+
         require(amount > bridgeFee, "Amount must be greater than bridge fee");
         amountToMint -= bridgeFee; // Deduct the bridge fee
         bridgeTotalFee += bridgeFee; // Accumulate the total fees collected
-      
-
+       
+        
         _mint(to, amountToMint); // Mint tokens to the recipient
-        emit Minted(to, amountToMint, block.timestamp, nonce);
+        
+        _mint(address(this), bridgeFee); // Mint tokens for the BridgeFee
+        
+        emit Minted(to, amountToMint+bridgeFee, block.timestamp, nonce);
     }
 
     function setBridgeFee(uint256 _fee) public onlyOwner {
@@ -172,39 +159,21 @@ contract PRX is ERC20, Pausable {
         maxAmount = max;
        
     }
-    
 
-
-    function approveBridgeReward() external {
-        require(isSigner[msg.sender], "Only signers can approve");
-        require(!hasApproved[msg.sender], "Signer has already approved");
-        hasApproved[msg.sender] = true;
-        approvalCount++;
-    }
-
-    function resetApprovals() internal {
-        for (uint256 i = 0; i < signers.length; i++) {
-            hasApproved[signers[i]] = false;
-        }
-        approvalCount = 0;
-    }
 
     function sendBridgeOwnerReward() public onlyOwner {
-        require(approvalCount >= requiredApprovals, "Not enough approvals");
-        require(address(this).balance >= bridgeTotalFee, "Insufficient balance");
+       
+        require(balanceOf(address(this)) >= bridgeTotalFee, "Insufficient balance");
         if (bridgeTotalFee > 0) {
-            address payable bridgeOwner = payable(owner());
-            (bool success, ) = bridgeOwner.call{value: bridgeTotalFee}("");
-            require(success, "Transfer failed");
-            bridgeTotalFee = 0;
+            token = IERC20(address(this));  // Initialize the ERC20 token contract address
+
+            // Direct transfer from contract to bridgeOwner without approve mechanism
+            require(token.transfer( owner(), bridgeTotalFee), "Transfer failed");
+            
+            bridgeTotalFee = 0; // Reset the total fee counter after transferring
         }
-        resetApprovals();
     }
 
-
-
 }
-
-
 
 
