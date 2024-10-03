@@ -3,14 +3,13 @@ pragma solidity ^0.8.26;
 
 import "@openzeppelin/contracts@5.0.2/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts@5.0.2/access/Ownable.sol";
-import "@openzeppelin/contracts@5.0.2/token/ERC20/extensions/ERC20Pausable.sol";
 import "@openzeppelin/contracts@5.0.2/token/ERC20/extensions/ERC20Burnable.sol";
 
 
 
-contract PRX is ERC20, Pausable {
+contract PRX is ERC20 {
     address private _owner;
-    mapping(address => bool) private _blacklist;
+
     // Define the maximum total supply of the tokens
     uint256 public constant MAX_SUPPLY = 30000000 * 10 ** 18;
     uint256 public constant maxBridgeFee = 100  * 10 ** 18; // Max fee (100 PRX)
@@ -20,7 +19,7 @@ contract PRX is ERC20, Pausable {
     uint256 public receiveCount;
     mapping(uint256 => bool) public processedNonces;
     uint256 public bridgeFee = 4 * 10 ** 18; //  fee (4 PRX)
-    uint256 public maxAmount = 100000 * 10 ** 18; // for one tx max Amount
+
     IERC20 public token;
 
     modifier onlyOwner() {
@@ -34,10 +33,7 @@ contract PRX is ERC20, Pausable {
         _burn(account, amount);
     }
 
-    modifier notBlacklisted(address account) {
-        require(!_blacklist[account], "Parex: account is blacklisted");
-        _;
-    }
+ 
 
     function owner() public view virtual returns (address) {
         return _owner;
@@ -90,37 +86,18 @@ contract PRX is ERC20, Pausable {
         _owner = initialOwner;
     }
     
-    function pause() public onlyOwner {
-        _pause();
-    }
-
-    function unpause() public onlyOwner {
-        _unpause();
-    }
-
-    function blacklist(address account) public onlyOwner nonReentrant {
-        _blacklist[account] = true;
-    }
-
-    function unblacklist(address account) public onlyOwner nonReentrant {
-        _blacklist[account] = false;
-    }
-
-    function isBlacklisted(address account) public view returns (bool) {
-        return _blacklist[account];
-    }
 
 
-    function _mint(address account, uint256 amount) internal virtual override whenNotPaused notBlacklisted(account)  {
+
+
+    function _mint(address account, uint256 amount) internal virtual override  {
         require(totalSupply() + amount <= MAX_SUPPLY, "Parex: max total supply exceeded");
         super._mint(account, amount);
     }
 
-    function lockTokens(uint256 amount, uint256 nonce, uint256 targetChainID) external  whenNotPaused   {
+    function lockTokens(uint256 amount, uint256 nonce, uint256 targetChainID) external     {
         require(!processedNonces[nonce], "Transfer already processed");
         require(balanceOf(msg.sender) >= amount, "Insufficient balance to lock tokens");
-        require(maxAmount >= amount, "Lock amount exceeds maximum allowed");
-
         // Burn tokens from the user's balance using burnFrom
         _burnFrom(msg.sender,amount);
 
@@ -132,18 +109,13 @@ contract PRX is ERC20, Pausable {
         require(!processedNonces[nonce], "Transfer already processed");
         processedNonces[nonce] = true;
         uint256 amountToMint = amount;
-
         require(amount > 0, "Amount must be greater than 0");
-
         require(amount > bridgeFee, "Amount must be greater than bridge fee");
         amountToMint -= bridgeFee; // Deduct the bridge fee
         bridgeTotalFee += bridgeFee; // Accumulate the total fees collected
-       
-        
         _mint(to, amountToMint); // Mint tokens to the recipient
-        
         _mint(address(this), bridgeFee); // Mint tokens for the BridgeFee
-        
+
         emit Minted(to, amountToMint+bridgeFee, block.timestamp, nonce);
     }
 
@@ -153,13 +125,6 @@ contract PRX is ERC20, Pausable {
         
         bridgeFee = _fee;
     }
-
-    function setMaxAmount(uint256 max) public onlyOwner {
-        require(max > 0, "Max Amount must be greater than 0");
-        maxAmount = max;
-       
-    }
-
 
     function sendBridgeOwnerReward() public onlyOwner {
        
@@ -175,5 +140,4 @@ contract PRX is ERC20, Pausable {
     }
 
 }
-
 
